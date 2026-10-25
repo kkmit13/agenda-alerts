@@ -28,12 +28,20 @@ Each entry in `amounts`: `label`, `value`, `unit`, `source_quote`.
 | Method and path | Purpose |
 | --- | --- |
 | `GET /api/health` | Is the server alive |
-| `GET /api/items` | All agenda items. Optional `?body=isd` or `?body=city` |
-| `POST /api/tax-impact` | Body: `home_value`, `exemption`, `current_rate`, `proposed_rate`. Returns `taxable_value`, `current_bill`, `proposed_bill`, `difference` |
+| `GET /api/items` | All stored agenda items. Optional `?body=isd` or `?body=city` |
+| `GET /api/lookup?address=...` (or `?lat=..&lon=..`) | Works for any US address. Returns `found`, `matched_address`, `state`, and `bodies`: the city/town, school district and county, each with `kind`, `display_name`, `body_name`, `scraped`, `token`, stored `items`, and `needs_discovery` |
+| `POST /api/agenda` | Body: one body from `/api/lookup` (`kind`, `name`, `display_name`, `state`, `state_name`, `token`). Searches the web for its latest agenda with Claude, then downloads the agenda and checks every number. Slow (20-60 s). Returns `status` (`ok`, `not_found`, `error`), `meeting_date`, `agenda_url`, `portal_url`, `items` |
+| `POST /api/tax-impact` | Body: `home_value`, optional `over_65`. Optional `current_rate`, `proposed_rate`, `exemption`, `rate_unit` (`per100`, `mills`, `percent`). Without rates it uses the CFISD 2024 vs 2025 preset. Returns `taxable_value`, `current_bill`, `proposed_bill`, `difference`, labels and a `note` |
 
-Tax rates are per $100 of taxable value, matching how Texas tax notices print them.
+Items returned by the API also carry `item_number`, `source_url` (link to the original agenda) and `verified`.
+
+`verified` means every number in `plain_summary` was found in the downloaded agenda text. Items whose agenda we could not download (some portals need JavaScript) come back with `verified: false`, and the site tells people to confirm in the original.
+
+## Where data comes from
+
+- **Scraped bodies** (`geo.SCRAPED_BODIES`): Jersey Village city council and CFISD, fetched by `fetcher.py` and summarized by `reader*.py`. Never searched by AI.
+- **Everywhere else**: `discover.py` on demand, cached in the `agenda_items` table (agenda URL stored in `filename`). A body is searched again when its newest stored meeting is more than 21 days old.
 
 ## Coming next (not built yet)
 
-- `GET /api/items/near?address=...` items that concern places near an address
 - `POST /api/subscribe` email alerts for an address
