@@ -2,6 +2,34 @@ import { useState } from "react";
 
 const API = "";
 
+// Turns "_09152026-416.pdf" or "2026-09-15" into "09/15/2026"
+function formatDate(raw) {
+  if (!raw) return "";
+  const s = String(raw);
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+  m = s.match(/^_(\d{2})(\d{2})(\d{4})/);
+  if (m) return `${m[1]}/${m[2]}/${m[3]}`;
+  return "";
+}
+
+// Sortable key like "20260915" so newest items can come first
+function dateKey(raw) {
+  const s = formatDate(raw);
+  if (!s) return "";
+  const [mm, dd, yyyy] = s.split("/");
+  return yyyy + mm + dd;
+}
+
+function parseAmounts(raw) {
+  try {
+    const list = JSON.parse(raw || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function App() {
   const [view, setView] = useState("home");
   const [address, setAddress] = useState("");
@@ -66,10 +94,11 @@ export default function App() {
     "other",
   ];
 
-  const filteredItems =
-    results?.items?.filter(
-      (item) => filter === "all" || item.category === filter,
-    ) ?? [];
+  const allItems = (results?.items ?? []).filter((item) => item.plain_summary);
+
+  const filteredItems = allItems
+    .filter((item) => filter === "all" || item.category === filter)
+    .sort((a, b) => dateKey(b.meeting_date).localeCompare(dateKey(a.meeting_date)));
 
   const exampleAddresses = ["16327 Lakeview Dr, Jersey Village TX 77040"];
 
@@ -91,8 +120,8 @@ export default function App() {
               in your community?
             </h1>
             <p className="hero-sub">
-              Enter your address to see city council and school board decisions
-              that affect you, explained in plain English.
+              Enter your address to see what your city council is deciding and
+              what your school taxes cost, explained in plain English.
             </p>
             <form className="search-form" onSubmit={handleSearch}>
               <input
@@ -109,8 +138,9 @@ export default function App() {
             </form>
             {error && <p className="error-msg">{error}</p>}
             <p className="coverage-note">
-              Currently covers <strong>Jersey Village</strong> and{" "}
-              <strong>Cypress-Fairbanks ISD</strong>.
+              Currently covers <strong>Jersey Village City Council</strong>{" "}
+              agendas and <strong>Cypress-Fairbanks ISD</strong> school tax
+              estimates.
             </p>
           </section>
 
@@ -122,8 +152,7 @@ export default function App() {
                 <div>
                   <div className="step-head">Enter your address</div>
                   <div className="step-body">
-                    We figure out which city council and school board represent
-                    you.
+                    We find which city and school district you live in.
                   </div>
                 </div>
               </div>
@@ -132,7 +161,8 @@ export default function App() {
                 <div>
                   <div className="step-head">See what is on the agenda</div>
                   <div className="step-body">
-                    Recent and upcoming decisions, explained in plain English.
+                    City council decisions, explained in plain English and
+                    checked against the original documents.
                   </div>
                 </div>
               </div>
@@ -141,7 +171,8 @@ export default function App() {
                 <div>
                   <div className="step-head">Know what it costs you</div>
                   <div className="step-body">
-                    See the real dollar impact of tax votes on your household.
+                    See how the latest school tax rate change affects your
+                    household.
                   </div>
                 </div>
               </div>
@@ -155,11 +186,11 @@ export default function App() {
           <div className="not-covered">
             <h2 className="nc-title">We do not cover that area yet</h2>
             <p className="nc-body">
-              LocalLens currently covers <strong>Jersey Village</strong> and{" "}
-              <strong>Cypress-Fairbanks ISD</strong>. We are working on
-              expanding to more communities.
+              LocalLens currently covers <strong>Jersey Village City Council</strong>{" "}
+              agendas and <strong>Cypress-Fairbanks ISD</strong> school tax
+              estimates. We are working on expanding to more communities.
             </p>
-            <p className="nc-body">Try one of these addresses to see a demo:</p>
+            <p className="nc-body">Try this address to see a demo:</p>
             <div className="example-addresses">
               {exampleAddresses.map((addr) => (
                 <button
@@ -215,20 +246,28 @@ export default function App() {
           <section className="feed-section">
             <div className="feed-header">
               <h2 className="section-title">Agenda items</h2>
-              <div className="filter-row">
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    className={`filter-btn ${filter === cat ? "active" : ""}`}
-                    onClick={() => setFilter(cat)}
-                  >
-                    {cat === "all" ? "All" : cat.replace("_", " ")}
-                  </button>
-                ))}
-              </div>
+              {allItems.length > 0 && (
+                <div className="filter-row">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      className={`filter-btn ${filter === cat ? "active" : ""}`}
+                      onClick={() => setFilter(cat)}
+                    >
+                      {cat === "all" ? "All" : cat.replace("_", " ")}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {filteredItems.length === 0 ? (
+            {allItems.length === 0 ? (
+              <p className="empty-msg">
+                No city council agenda items for this address yet. School board
+                agendas are coming soon. The school tax estimate below works for
+                Cypress-Fairbanks ISD addresses.
+              </p>
+            ) : filteredItems.length === 0 ? (
               <p className="empty-msg">No items found for this filter.</p>
             ) : (
               <div className="feed">
@@ -242,20 +281,19 @@ export default function App() {
                         <span className="item-vote">Vote</span>
                       )}
                       <span className="item-date">
-                        {item.meeting_date?.replace(".pdf", "") || ""}
+                        {formatDate(item.meeting_date)}
                       </span>
                     </div>
                     <p className="item-summary">{item.plain_summary}</p>
-                    {item.amounts &&
-                      JSON.parse(item.amounts || "[]").length > 0 && (
-                        <div className="item-amounts">
-                          {JSON.parse(item.amounts).map((amt, i) => (
-                            <span key={i} className="amount-tag">
-                              {amt}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                    {parseAmounts(item.amounts).length > 0 && (
+                      <div className="item-amounts">
+                        {parseAmounts(item.amounts).map((amt, i) => (
+                          <span key={i} className="amount-tag">
+                            {amt}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {item.verified && (
                       <div className="item-verified">
                         Verified against source
@@ -341,9 +379,10 @@ export default function App() {
       <footer className="footer">
         <div className="footer-inner">
           <p>
-            LocalLens covers Jersey Village city council and Cypress-Fairbanks
-            ISD. Summaries are verified against source documents and are for
-            informational purposes only.
+            LocalLens covers Jersey Village City Council agendas and
+            Cypress-Fairbanks ISD school tax estimates. Summaries are checked
+            against the source documents and are for informational purposes
+            only.
           </p>
           <p className="footer-built">
             Built for the 2026 Congressional App Challenge.
